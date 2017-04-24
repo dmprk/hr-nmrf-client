@@ -87,6 +87,7 @@ export class ReportEdit extends React.PureComponent { // eslint-disable-line rea
     model: '.associatedDate',
     label: 'Scheduled Date',
     controlType: 'multiselect',
+    multiple:false,
     options: fromJS(this.mapDateOptions(dates, dateId)),
   });
   render() {
