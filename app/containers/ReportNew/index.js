@@ -47,7 +47,7 @@ export class ReportNew extends React.PureComponent { // eslint-disable-line reac
     model: '.associatedDate',
     label: 'Scheduled Date',
     controlType: 'multiselect',
-    multiple:false,
+    multiple: false,
     options: this.mapDateOptions(dates),
   });
 
