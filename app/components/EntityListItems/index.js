@@ -1,20 +1,36 @@
 import React, { PropTypes } from 'react';
+import styled from 'styled-components';
+import { palette } from 'styled-theme';
+
 import { map, forEach } from 'lodash/collection';
 
-import EntityListItem from './EntityListItem';
-import EntityListChildItems from './EntityListChildItems';
+import EntityListItem from 'components/EntityListItem';
+
+import EntityListNestedList from './EntityListNestedList';
+import EntityListNestedReportList from './EntityListNestedReportList';
+
+const Styled = styled.div`
+  padding: ${(props) => props.separated ? '1em 0 0' : '0'};
+`;
+const ItemWrapper = styled.div`
+  border-top: 1px solid;
+  padding: ${(props) => props.separated ? '0.5em 0 2.5em' : '0'};
+  border-color: ${(props) => props.separated ? palette('greyscaleLight', 4) : palette('greyscaleLight', 0)};
+`;
 
 export class EntityListItems extends React.PureComponent { // eslint-disable-line react/prefer-stateless-function
 
   getConnectedCounts = (entity, connectionOptions) => {
     const counts = [];
     forEach(connectionOptions, (option) => {
-      const expandable = typeof option.expandable !== 'undefined' ? option.expandable : false;
-      if (!expandable && entity[option.path] && Object.keys(entity[option.path]).length > 0) {
+      const isExpandable = typeof option.expandable !== 'undefined' ? option.expandable : false;
+      if (!isExpandable && entity[option.path] && Object.keys(entity[option.path]).length > 0) {
         counts.push({
           count: Object.keys(entity[option.path]).length,
           option: {
             label: option.label,
+            icon: option.path === 'measures' ? 'actions' : option.path,
+            style: option.path === 'measures' ? 'actions' : option.path,
           },
         });
       }
@@ -34,6 +50,8 @@ export class EntityListItems extends React.PureComponent { // eslint-disable-lin
               : category.attributes.title);
             if (query && onClick) {
               tags.push({
+                taxId: tax.id,
+                title: category.attributes.title,
                 label: label.length > 10 ? `${label.substring(0, 10)}...` : label,
                 onClick: () => onClick({
                   value: catId,
@@ -43,6 +61,8 @@ export class EntityListItems extends React.PureComponent { // eslint-disable-lin
               });
             } else {
               tags.push({
+                taxId: tax.id,
+                title: category.attributes.title,
                 label: label.length > 10 ? `${label.substring(0, 10)}...` : label,
               });
             }
@@ -57,38 +77,37 @@ export class EntityListItems extends React.PureComponent { // eslint-disable-lin
     const {
       taxonomies,
       entityLinkTo,
-      filters,
+      associations,
       onTagClick,
-      showDate,
-      expand,
-      expandable,
+      expandNo,
+      isExpandable,
       expandableColumns,
       onExpand,
     } = props;
-
     return {
       id: entity.id,
       title: entity.attributes.name || entity.attributes.title,
       reference: entity.attributes.number || entity.id,
       linkTo: `${entityLinkTo}${entity.id}`,
       status: entity.attributes.draft ? 'draft' : null,
-      updated: showDate ? entity.attributes.updated_at.split('T')[0] : null,
+      targetDate: entity.attributes.target_date ? this.context.intl.formatDate(new Date(entity.attributes.target_date)) : null,
       tags: taxonomies
         ? this.getEntityTags(entity,
           taxonomies,
-          filters.taxonomies && filters.taxonomies.query,
-          filters.taxonomies && onTagClick)
+          associations.taxonomies && associations.taxonomies.query,
+          associations.taxonomies && onTagClick)
         : [],
-      connectedCounts: filters && filters.connections ? this.getConnectedCounts(entity, filters.connections.options) : [],
-      expandables: expandable && !expand
+      connectedCounts: associations && associations.connections ? this.getConnectedCounts(entity, associations.connections.options) : [],
+      expandables: isExpandable && !expandNo
         ? expandableColumns.map((column, i) => ({
           type: column.type,
+          icon: column.icon,
           label: column.label,
           count: column.getCount && column.getCount(entity),
           info: column.getInfo && column.getInfo(entity),
-          onClick: () => onExpand(true, i + 1),
+          onClick: () => onExpand(expandNo > i ? i : i + 1),
         }))
-        : [],
+        : null,
     };
   };
 
@@ -98,41 +117,48 @@ export class EntityListItems extends React.PureComponent { // eslint-disable-lin
       entitiesSelected,
       isSelect,
       onEntitySelect,
-      expand,
-      expandable,
+      expandNo,
+      isExpandable,
       expandableColumns,
-      showDate,
       onExpand,
+      entityIcon,
     } = this.props;
 
     return (
-      <div>
+      <Styled separated={expandNo}>
         {
           entities.map((entity, i) =>
-            <div key={i}>
+            <ItemWrapper key={i} separated={expandNo}>
               <EntityListItem
                 select={isSelect}
                 checked={isSelect && entitiesSelected.map((e) => e.id).indexOf(entity.id) > -1}
                 onSelect={(checked) => onEntitySelect(entity.id, checked)}
                 entity={this.mapToEntityListItem(entity, this.props)}
-                expand={expand}
+                expandNo={expandNo}
+                entityIcon={entityIcon}
               />
-              {expandable && expand > 0 && expandableColumns.length > 0 &&
-                <EntityListChildItems
-                  entities={expandableColumns[0].getEntities(entity)}
-                  showDate={showDate}
+              {isExpandable && expandNo > 0 && expandableColumns[0].type === 'reports' &&
+                <EntityListNestedReportList
+                  reports={expandableColumns[0].getReports(entity)}
                   entityLinkTo={expandableColumns[0].entityLinkTo}
-                  taxonomies={null}
-                  expand={expand - 1}
-                  expandable={expandableColumns.length > 1}
+                  dates={expandableColumns[0].getDates(entity)}
+                />
+              }
+              {isExpandable && expandNo > 0 && expandableColumns[0].type !== 'reports' &&
+                <EntityListNestedList
+                  entities={expandableColumns[0].getEntities(entity)}
+                  entityLinkTo={expandableColumns[0].entityLinkTo}
+                  entityIcon={expandableColumns[0].icon}
+                  expandNo={expandNo - 1}
+                  isExpandable={expandableColumns.length > 1}
                   expandableColumns={expandableColumns.length > 1 ? [expandableColumns[1]] : null}
                   onExpand={onExpand}
                 />
               }
-            </div>
+            </ItemWrapper>
           )
         }
-      </div>
+      </Styled>
     );
   }
 }
@@ -141,16 +167,20 @@ EntityListItems.propTypes = {
   entities: PropTypes.array.isRequired,
   entitiesSelected: PropTypes.array,
   isSelect: PropTypes.bool,
-  onEntitySelect: PropTypes.func.isRequired,
-  showDate: PropTypes.bool,
+  onEntitySelect: PropTypes.func,
   taxonomies: PropTypes.object,
   entityLinkTo: PropTypes.string,
-  filters: PropTypes.object,
+  associations: PropTypes.object,
   onTagClick: PropTypes.func,
   onExpand: PropTypes.func,
-  expand: PropTypes.number,
-  expandable: PropTypes.bool,
+  expandNo: PropTypes.number,
+  isExpandable: PropTypes.bool,
   expandableColumns: PropTypes.array,
+  entityIcon: PropTypes.string,
+};
+
+EntityListItems.contextTypes = {
+  intl: React.PropTypes.object.isRequired,
 };
 
 export default EntityListItems;

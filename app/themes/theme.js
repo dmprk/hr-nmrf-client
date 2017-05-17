@@ -69,8 +69,12 @@ theme.palette = {
   actionsHover: ['#F2B200'],
   indicators: ['#EB6E51'],
   indicatorsHover: ['#D66149'],
+  reports: ['#EB6E51'],
+  reportsHover: ['#D66149'],
   recommendations: ['#FF9B69'],
   recommendationsHover: ['#F48B5D'],
+  attributes: ['#6C787A'],
+  attributesHover: ['#4A595C'],
 
   // other palettes
   danger: coolorsToHex('https://coolors.co/ce4f40-e25646-e46556-e77467-e98478'),

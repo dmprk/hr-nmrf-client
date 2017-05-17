@@ -8,20 +8,23 @@ import React, { PropTypes } from 'react';
 import { connect } from 'react-redux';
 import Helmet from 'react-helmet';
 import { FormattedMessage } from 'react-intl';
-import { find } from 'lodash/collection';
 
 import { loadEntitiesIfNeeded, updatePath } from 'containers/App/actions';
 
-import { PUBLISH_STATUSES } from 'containers/App/constants';
+import { CONTENT_SINGLE } from 'containers/App/constants';
 
-import Page from 'components/Page';
-import EntityView from 'components/views/EntityView';
+import Loading from 'components/Loading';
+import Content from 'components/Content';
+import ContentHeader from 'components/ContentHeader';
+import EntityView from 'components/EntityView';
 
 import {
   getEntity,
   isReady,
+  isUserContributor,
 } from 'containers/App/selectors';
 
+import appMessages from 'containers/App/messages';
 import messages from './messages';
 
 export class ReportView extends React.PureComponent { // eslint-disable-line react/prefer-stateless-function
@@ -29,113 +32,171 @@ export class ReportView extends React.PureComponent { // eslint-disable-line rea
   componentWillMount() {
     this.props.loadEntitiesIfNeeded();
   }
+  componentWillReceiveProps(nextProps) {
+    // reload entities if invalidated
+    if (!nextProps.dataReady) {
+      this.props.loadEntitiesIfNeeded();
+    }
+  }
+  getHeaderMainFields = (entity, isManager) => ([ // fieldGroups
+    { // fieldGroup
+      fields: [
+        {
+          type: 'title',
+          value: entity.attributes.title,
+          isManager,
+        },
+      ],
+    },
+  ]);
+
+  getHeaderAsideFields = (entity, isContributor) => {
+    if (!isContributor) {
+      return [
+        {
+          fields: [
+            {
+              type: 'referenceStatus',
+              fields: [
+                {
+                  type: 'reference',
+                  value: entity.id,
+                  large: true,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+    }
+    return [
+      {
+        fields: [
+          {
+            type: 'referenceStatus',
+            fields: [
+              {
+                type: 'reference',
+                value: entity.id,
+              },
+              {
+                type: 'status',
+                value: entity.attributes.draft,
+              },
+            ],
+          },
+          {
+            type: 'meta',
+            fields: [
+              {
+                label: this.context.intl.formatMessage(appMessages.attributes.meta.updated_at),
+                value: this.context.intl.formatDate(new Date(entity.attributes.updated_at)),
+              },
+              {
+                label: this.context.intl.formatMessage(appMessages.attributes.meta.updated_by),
+                value: entity.user && entity.user.attributes.name,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+  }
+  getBodyMainFields = (entity, isContributor) => ([
+    {
+      fields: [
+        {
+          type: 'description',
+          value: entity.attributes.description,
+        },
+        {
+          type: 'download',
+          value: entity.attributes.document_url,
+          isManager: isContributor,
+          public: entity.attributes.document_public,
+          showEmpty: this.context.intl.formatMessage(appMessages.attributes.documentEmpty),
+        },
+      ],
+    },
+  ]);
+  getBodyAsideFields = (entity) => ([ // fieldGroups
+    {
+      type: 'dark',
+      fields: [
+        {
+          type: 'date',
+          value: entity.date && entity.date.attributes.due_date && this.context.intl.formatDate(new Date(entity.date.attributes.due_date)),
+          label: this.context.intl.formatMessage(appMessages.entities.due_dates.single),
+          showEmpty: this.context.intl.formatMessage(appMessages.entities.progress_reports.unscheduled),
+        },
+      ],
+    },
+  ]);
+  getFields = (entity, isContributor) => ({
+    header: {
+      main: this.getHeaderMainFields(entity, isContributor),
+      aside: this.getHeaderAsideFields(entity, isContributor),
+    },
+    body: {
+      main: this.getBodyMainFields(entity, isContributor),
+      aside: isContributor ? this.getBodyAsideFields(entity) : null,
+    },
+  });
 
   render() {
-    const { report, dataReady } = this.props;
-    const reference = this.props.params.id;
-    const status = report && find(PUBLISH_STATUSES, { value: report.attributes.draft });
-    const statusDoc = report && find(PUBLISH_STATUSES, { value: report.attributes.document_public });
+    const { report, dataReady, isContributor } = this.props;
 
     let pageTitle = this.context.intl.formatMessage(messages.pageTitle);
-
-    if (report) {
-      pageTitle = `${pageTitle} (Indicator: ${report.attributes.indicator_id})`;
+    if (report && dataReady) {
+      pageTitle = `${pageTitle} for indicator: ${report.attributes.indicator_id}`;
     }
 
     return (
       <div>
         <Helmet
-          title={`${this.context.intl.formatMessage(messages.pageTitle)}: ${reference}`}
+          title={`${this.context.intl.formatMessage(messages.pageTitle)}: ${this.props.params.id}`}
           meta={[
             { name: 'description', content: this.context.intl.formatMessage(messages.metaDescription) },
           ]}
         />
-        { !report && !dataReady &&
-          <div>
-            <FormattedMessage {...messages.loading} />
-          </div>
-        }
-        { !report && dataReady &&
-          <div>
-            <FormattedMessage {...messages.notFound} />
-          </div>
-        }
-        { report && dataReady &&
-          <Page
+        <Content>
+          <ContentHeader
             title={pageTitle}
-            actions={[
-              {
-                type: 'simple',
-                title: 'Edit',
-                onClick: this.props.handleEdit,
-              },
-              {
-                type: 'primary',
-                title: 'Close',
-                onClick: () => this.props.handleClose(this.props.report.indicator.id),
-              },
-            ]}
-          >
+            type={CONTENT_SINGLE}
+            icon="report"
+            buttons={isContributor
+              ? [
+                {
+                  type: 'edit',
+                  onClick: this.props.handleEdit,
+                },
+                {
+                  type: 'close',
+                  onClick: () => this.props.handleClose(this.props.report.indicator.id),
+                },
+              ]
+              : [
+                {
+                  type: 'close',
+                  onClick: () => this.props.handleClose(this.props.report.indicator.id),
+                },
+              ]
+             }
+          />
+          { !report && !dataReady &&
+            <Loading />
+          }
+          { !report && dataReady &&
+            <div>
+              <FormattedMessage {...messages.notFound} />
+            </div>
+          }
+          { report && dataReady &&
             <EntityView
-              fields={{
-                header: {
-                  main: [
-                    {
-                      id: 'title',
-                      value: report.attributes.title,
-                    },
-                  ],
-                  aside: [
-                    {
-                      id: 'number',
-                      heading: 'Number',
-                      value: reference,
-                    },
-                    {
-                      id: 'status',
-                      heading: 'Status',
-                      value: status && status.label,
-                    },
-                    {
-                      id: 'updated',
-                      heading: 'Updated At',
-                      value: report.attributes.updated_at,
-                    },
-                    {
-                      id: 'updated_by',
-                      heading: 'Updated By',
-                      value: report.user && report.user.attributes.name,
-                    },
-                  ],
-                },
-                body: {
-                  main: [
-                    report.date ? {
-                      id: 'date',
-                      heading: 'Scheduled Date',
-                      value: report.date.attributes.due_date,
-                    } : null,
-                    {
-                      id: 'description',
-                      heading: 'Description',
-                      value: report.attributes.description,
-                    },
-                    {
-                      id: 'document_url',
-                      heading: 'Document URL',
-                      value: report.attributes.document_url,
-                    },
-                    {
-                      id: 'document_public',
-                      heading: 'Document public',
-                      value: statusDoc && statusDoc.label,
-                    },
-                  ],
-                },
-              }}
+              fields={this.getFields(report, isContributor)}
             />
-          </Page>
-        }
+          }
+        </Content>
       </div>
     );
   }
@@ -147,6 +208,7 @@ ReportView.propTypes = {
   handleEdit: PropTypes.func,
   report: PropTypes.object,
   dataReady: PropTypes.bool,
+  isContributor: PropTypes.bool,
   params: PropTypes.object,
 };
 
@@ -155,6 +217,7 @@ ReportView.contextTypes = {
 };
 
 const mapStateToProps = (state, props) => ({
+  isContributor: isUserContributor(state),
   dataReady: isReady(state, { path: [
     'progress_reports',
     'users',
